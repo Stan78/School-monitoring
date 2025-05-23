@@ -99,10 +99,12 @@ class WebsiteMonitor:
             logging.info(f"{name}: baseline saved.")
         elif current_hash != previous_hash:
             self.previous_states[url] = current_hash
-            message = f"🎓 <b>Нови свободни места!</b>
-"                       f"<b>Училище:</b> {name}
-"                       f"<b>Линк:</b> {url}
-"                       f"<b>Време:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+            message = (
+    f"🎓 <b>Нови свободни места!</b>\n\n"
+    f"<b>Училище:</b> {name}\n"
+    f"<b>Линк:</b> {url}\n"
+    f"<b>Време:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+)
             self.send_telegram_message(message)
         else:
             logging.info(f"{name}: no change.")
