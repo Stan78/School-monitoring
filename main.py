@@ -198,8 +198,8 @@ def initialize_monitor():
         return None
 
 def monitoring_loop():
-    global monitor
     try:
+        global monitor
         logging.info("Starting monitoring loop...")
         
         if not monitor:
@@ -285,6 +285,7 @@ def status():
 @app.route('/check-now')
 def check_now():
     """Manual trigger for checking websites"""
+    global monitor
     if monitor:
         try:
             successful = monitor.check_all_websites(WEBSITES)
@@ -298,7 +299,6 @@ def check_now():
             return jsonify({'status': 'error', 'message': str(e)}), 500
     else:
         # Try to initialize monitor if it doesn't exist
-        global monitor
         monitor = initialize_monitor()
         if monitor:
             successful = monitor.check_all_websites(WEBSITES)
