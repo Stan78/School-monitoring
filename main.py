@@ -33,7 +33,7 @@ class WebsiteMonitor:
 
     def load_previous_states(self):
         try:
-            with open(self.data_file, 'r') as f:
+            with open(self.data_file, ' 'r') as f:
                 self.previous_states = json.load(f)
         except FileNotFoundError:
             self.previous_states = {}
@@ -99,12 +99,11 @@ class WebsiteMonitor:
             logging.info(f"{name}: baseline saved.")
         elif current_hash != previous_hash:
             self.previous_states[url] = current_hash
-            message = (
-                f"🎓 <b>Нови свободни места!</b>\n\n"
-                f"<b>Училище:</b> {name}\n"
-                f"<b>Линк:</b> {url}\n"
-                f"<b>Време:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
-            )
+            message = f"🎓 <b>Нови свободни места!</b>
+
+"                       f"<b>Училище:</b> {name}
+"                       f"<b>Линк:</b> {url}
+"                       f"<b>Време:</b> {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
             self.send_telegram_message(message)
         else:
             logging.info(f"{name}: no change.")
@@ -117,79 +116,51 @@ class WebsiteMonitor:
             time.sleep(2)
         logging.info("Check cycle done.")
 
-# Flask server to keep alive
 app = Flask(__name__)
+
+WEBSITES = [
+    {'name': '18 СОУ - Свободни места', 'url': 'https://18sou.net/свободни-места/', 'selector': '.entry-content, .content, main, article'},
+    {'name': 'School32 - Свободни места', 'url': 'https://school32.com/прием/свободни-места/', 'selector': '.entry-content, .content, main, article'},
+    {'name': 'SMG - Свободни места', 'url': 'https://smg.bg/razni/2024/03/11/8622/svobodni-mesta-za-priem-na-uchenitsi-v-10-klas-za-vtori-srok-na-uchebnata-2023-2024-godina/', 'selector': '.entry-content, .content, main, article'},
+    {'name': 'NPMG - Прием в старши класове', 'url': 'https://npmg.org/прием-в-старши-класове/', 'selector': '.entry-content, .content, main, article'},
+    {'name': 'FELS Sofia - Свободни места', 'url': 'https://www.fels-sofia.org/bg/svobodni-mesta-236', 'selector': '.entry-content, .content, main, article'},
+    {'name': '2 ЕЛС - Свободни места', 'url': 'https://2els.com/информация-за-свободни-места', 'selector': '.entry-content, .content, main, article'},
+    {'name': '90 СОУ - Прием', 'url': 'https://sou90.org/priem/', 'selector': '.entry-content, .content, main, article'},
+    {'name': '22 СЕУ - Свободни места', 'url': 'https://22seu.org/свободни-места-за-ученици/', 'selector': '.entry-content, .content, main, article'}
+]
+
+def run_monitor():
+    try:
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        interval = int(os.getenv("CHECK_INTERVAL", 480))
+
+        monitor = WebsiteMonitor(bot_token, chat_id)
+
+        monitor.send_telegram_message(
+            f"🎓 <b>Мониторинг стартиран</b>
+Проверявам {len(WEBSITES)} училища на всеки {interval} минути за свободни места."
+        )
+
+        monitor.check_all_websites(WEBSITES)
+        schedule.every(interval).minutes.do(lambda: monitor.check_all_websites(WEBSITES))
+
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except Exception as e:
+        logging.error(f"Monitor crashed: {e}")
+
+def start_background_monitor():
+    thread = threading.Thread(target=run_monitor, daemon=True)
+    thread.start()
+
+start_background_monitor()
 
 @app.route('/')
 def home():
     return "✅ Website monitoring service is running."
 
-# Websites list
-WEBSITES = WEBSITES = [
-    {
-        'name': '18 СОУ - Свободни места',
-        'url': 'https://18sou.net/%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0/',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': '32-ро - Свободни места',
-        'url': 'https://school32.com/%d0%bf%d1%80%d0%b8%d0%b5%d0%bc/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0/',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': 'СМГ - Свободни места',
-        'url': 'https://smg.bg/razni/2024/03/11/8622/svobodni-mesta-za-priem-na-uchenitsi-v-10-klas-za-vtori-srok-na-uchebnata-2023-2024-godina/',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': 'НПМГ - Прием в старши класове',
-        'url': 'https://npmg.org/%d0%bf%d1%80%d0%b8%d0%b5%d0%bc-%d0%b2-%d1%81%d1%82%d0%b0%d1%80%d1%88%d0%b8-%d0%ba%d0%bb%d0%b0%d1%81%d0%be%d0%b2%d0%b5/',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': '1-ва Английска Sofia - Свободни места',
-        'url': 'https://www.fels-sofia.org/bg/svobodni-mesta-236',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': '2-ра Английска - Свободни места',
-        'url': 'https://2els.com/%D0%B8%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%B7%D0%B0-%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': '90 СОУ - Прием',
-        'url': 'https://sou90.org/priem/',
-        'selector': '.entry-content, .content, main, article'
-    },
-    {
-        'name': '22 СЕУ - Свободни места',
-        'url': 'https://22seu.org/%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0-%D0%B7%D0%B0-%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D1%86%D0%B8/',
-        'selector': '.entry-content, .content, main, article'
-    }
-]
-
-def run_monitor():
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    interval = int(os.getenv("CHECK_INTERVAL", 480))
-
-    monitor = WebsiteMonitor(bot_token, chat_id)
-
-    monitor.send_telegram_message(
-        f"🎓 <b>Мониторинг стартиран</b>\nПроверявам {len(WEBSITES)} училища на всеки {interval} минути за свободни места."
-    )
-
-    monitor.check_all_websites(WEBSITES)
-    schedule.every(interval).minutes.do(lambda: monitor.check_all_websites(WEBSITES))
-
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-# ✅ Start background monitor thread on startup
-threading.Thread(target=run_monitor, daemon=True).start()
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-
