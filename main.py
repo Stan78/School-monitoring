@@ -2,9 +2,8 @@ import os
 import requests
 import hashlib
 import time
-import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from bs4 import BeautifulSoup
 import threading
 from flask import Flask, jsonify
@@ -13,12 +12,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Setup logging (avoid file logging on Render)
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# Flask app
+app = Flask(__name__)
 
 class WebsiteMonitor:
     def __init__(self, bot_token, chat_id):
@@ -27,12 +28,13 @@ class WebsiteMonitor:
         self.previous_states = {}
         self.last_check = None
         self.check_count = 0
-        self.status = "Starting..."
+        self.status = "Initializing..."
+        logging.info("WebsiteMonitor initialized")
         
     def get_page_content(self, url, selector=None):
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
@@ -41,7 +43,6 @@ class WebsiteMonitor:
             if selector:
                 elements = soup.select(selector)
                 if not elements:
-                    # Fallback selectors
                     fallback_selectors = ['.post-content', '.page-content', '.entry', 'main', 'article']
                     for fallback in fallback_selectors:
                         elements = soup.select(fallback)
@@ -49,7 +50,6 @@ class WebsiteMonitor:
                             break
                 content = ' '.join([e.get_text(strip=True) for e in elements])
             else:
-                # Remove unwanted tags
                 for tag in soup(["script", "style", "nav", "footer", "header"]):
                     tag.decompose()
                 content = soup.get_text()
@@ -111,7 +111,7 @@ class WebsiteMonitor:
             try:
                 if self.check_website(site['url'], site['name'], site.get('selector')):
                     successful_checks += 1
-                time.sleep(1)  # Shorter delay between checks
+                time.sleep(2)
             except Exception as e:
                 logging.error(f"Error checking {site['name']}: {e}")
         
@@ -129,9 +129,6 @@ class WebsiteMonitor:
             'check_count': self.check_count,
             'monitored_sites': len(WEBSITES)
         }
-
-# Flask app setup
-app = Flask(__name__)
 
 # Websites list
 WEBSITES = [
@@ -182,43 +179,76 @@ monitor = None
 
 def initialize_monitor():
     global monitor
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    
-    if not bot_token or not chat_id:
-        logging.error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID environment variables")
-        return None
+    try:
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("TELEGRAM_CHAT_ID")
         
-    monitor = WebsiteMonitor(bot_token, chat_id)
-    return monitor
+        logging.info(f"Bot token exists: {bool(bot_token)}")
+        logging.info(f"Chat ID exists: {bool(chat_id)}")
+        
+        if not bot_token or not chat_id:
+            logging.error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+            return None
+            
+        monitor = WebsiteMonitor(bot_token, chat_id)
+        logging.info("Monitor initialized successfully")
+        return monitor
+    except Exception as e:
+        logging.error(f"Error initializing monitor: {e}")
+        return None
 
 def monitoring_loop():
     global monitor
-    if not monitor:
-        monitor = initialize_monitor()
+    try:
+        logging.info("Starting monitoring loop...")
+        
         if not monitor:
-            return
-    
-    # Send startup message
-    startup_msg = f"🎓 <b>Мониторинг стартиран</b>\nПроверявам {len(WEBSITES)} училища за свободни места."
-    monitor.send_telegram_message(startup_msg)
-    
-    # Initial check
-    monitor.check_all_websites(WEBSITES)
-    
-    # Get check interval from environment (default 8 hours = 480 minutes)
-    check_interval_minutes = int(os.getenv("CHECK_INTERVAL", 480))
-    check_interval_seconds = check_interval_minutes * 60
-    
-    logging.info(f"Monitor will check every {check_interval_minutes} minutes")
-    
+            monitor = initialize_monitor()
+            if not monitor:
+                logging.error("Failed to initialize monitor")
+                return
+        
+        # Send startup message
+        startup_msg = f"🎓 <b>Мониторинг стартиран</b>\nПроверявам {len(WEBSITES)} училища за свободни места."
+        monitor.send_telegram_message(startup_msg)
+        
+        # Initial check
+        monitor.check_all_websites(WEBSITES)
+        
+        # Get check interval
+        check_interval_minutes = int(os.getenv("CHECK_INTERVAL", 480))
+        check_interval_seconds = check_interval_minutes * 60
+        
+        logging.info(f"Monitor will check every {check_interval_minutes} minutes")
+        
+        while True:
+            try:
+                time.sleep(check_interval_seconds)
+                monitor.check_all_websites(WEBSITES)
+            except Exception as e:
+                logging.error(f"Error in monitoring loop: {e}")
+                time.sleep(300)  # Wait 5 minutes before retrying
+                
+    except Exception as e:
+        logging.error(f"Fatal error in monitoring loop: {e}")
+
+# Self-ping to prevent sleeping
+def self_ping():
     while True:
         try:
-            time.sleep(check_interval_seconds)
-            monitor.check_all_websites(WEBSITES)
+            time.sleep(840)  # 14 minutes
+            port = os.environ.get("PORT", 5000)
+            # Try to get the external URL from Render environment
+            external_url = os.environ.get("RENDER_EXTERNAL_URL")
+            if external_url:
+                ping_url = f"{external_url}/ping"
+            else:
+                ping_url = f"http://localhost:{port}/ping"
+            
+            response = requests.get(ping_url, timeout=10)
+            logging.info(f"Self-ping successful: {response.status_code}")
         except Exception as e:
-            logging.error(f"Error in monitoring loop: {e}")
-            time.sleep(300)  # Wait 5 minutes before retrying
+            logging.error(f"Self-ping failed: {e}")
 
 # Flask routes
 @app.route('/')
@@ -226,7 +256,7 @@ def home():
     return """
     <h1>🎓 School Monitor Service</h1>
     <p>✅ Service is running and monitoring school websites for available spots.</p>
-    <p><a href="/status">Check Status</a> | <a href="/health">Health Check</a></p>
+    <p><a href="/status">Check Status</a> | <a href="/health">Health Check</a> | <a href="/check-now">Manual Check</a></p>
     """
 
 @app.route('/health')
@@ -234,14 +264,23 @@ def health():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'service': 'school-monitor'
+        'service': 'school-monitor',
+        'monitor_initialized': monitor is not None
     })
 
 @app.route('/status')
 def status():
     if monitor:
         return jsonify(monitor.get_status())
-    return jsonify({'status': 'initializing'})
+    return jsonify({
+        'status': 'initializing',
+        'message': 'Monitor is starting up...',
+        'env_vars': {
+            'bot_token_set': bool(os.getenv("TELEGRAM_BOT_TOKEN")),
+            'chat_id_set': bool(os.getenv("TELEGRAM_CHAT_ID")),
+            'check_interval': os.getenv("CHECK_INTERVAL", 480)
+        }
+    })
 
 @app.route('/check-now')
 def check_now():
@@ -257,34 +296,51 @@ def check_now():
             })
         except Exception as e:
             return jsonify({'status': 'error', 'message': str(e)}), 500
-    return jsonify({'status': 'monitor not initialized'}), 503
+    else:
+        # Try to initialize monitor if it doesn't exist
+        global monitor
+        monitor = initialize_monitor()
+        if monitor:
+            successful = monitor.check_all_websites(WEBSITES)
+            return jsonify({
+                'status': 'completed',
+                'successful_checks': successful,
+                'total_sites': len(WEBSITES),
+                'timestamp': datetime.now().isoformat(),
+                'note': 'Monitor was initialized during this request'
+            })
+        else:
+            return jsonify({
+                'status': 'error', 
+                'message': 'Monitor not initialized. Check environment variables.'
+            }), 503
 
 @app.route('/ping')
 def ping():
-    """Keep-alive endpoint"""
     return 'pong'
 
-# Self-ping function to keep the service awake
-def self_ping():
-    while True:
-        try:
-            time.sleep(840)  # Ping every 14 minutes (before 15-minute sleep)
-            port = os.environ.get("PORT", 5000)
-            app_url = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{port}")
-            requests.get(f"{app_url}/ping", timeout=10)
-            logging.info("Self-ping successful")
-        except Exception as e:
-            logging.error(f"Self-ping failed: {e}")
-
 if __name__ == "__main__":
-    # Start the monitoring thread
-    monitor_thread = threading.Thread(target=monitoring_loop, daemon=True)
-    monitor_thread.start()
-    
-    # Start self-ping thread to prevent sleeping
-    ping_thread = threading.Thread(target=self_ping, daemon=True)
-    ping_thread.start()
-    
-    # Start Flask app
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        logging.info("Starting Flask application...")
+        
+        # Initialize monitor in main thread first
+        monitor = initialize_monitor()
+        
+        # Start the monitoring thread
+        monitor_thread = threading.Thread(target=monitoring_loop, daemon=True)
+        monitor_thread.start()
+        logging.info("Monitor thread started")
+        
+        # Start self-ping thread
+        ping_thread = threading.Thread(target=self_ping, daemon=True)
+        ping_thread.start()
+        logging.info("Self-ping thread started")
+        
+        # Start Flask app
+        port = int(os.environ.get("PORT", 5000))
+        logging.info(f"Starting Flask on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=False)
+        
+    except Exception as e:
+        logging.error(f"Failed to start application: {e}")
+        raise
