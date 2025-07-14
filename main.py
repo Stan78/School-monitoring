@@ -124,8 +124,16 @@ app = Flask(__name__)
 def home():
     return "✅ Website monitoring service is running."
 
+@app.route('/health')
+def health():
+    return {
+        "status": "running",
+        "timestamp": datetime.now().isoformat(),
+        "monitored_sites": len(WEBSITES)
+    }
+
 # Websites list
-WEBSITES = WEBSITES = [
+WEBSITES = [
     {
         'name': '18 СОУ - Свободни места',
         'url': 'https://18sou.net/%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0/',
@@ -165,23 +173,80 @@ WEBSITES = WEBSITES = [
         'name': '22 СЕУ - Свободни места',
         'url': 'https://22seu.org/%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0-%D0%B7%D0%B0-%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D1%86%D0%B8/',
         'selector': '.entry-content, .content, main, article'
+    },
+    # NEW SCHOOLS ADDED:
+    {
+        'name': '1 СОУ София - Свободни места',
+        'url': 'https://1sousofia.org/?page_id=7673',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '2 СУ - Свободни места',
+        'url': 'https://2su.bg/%D1%81%D0%B2%D0%BE%D0%B1%D0%BE%D0%B4%D0%BD%D0%B8-%D0%BC%D0%B5%D1%81%D1%82%D0%B0',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '10 СОУ - Свободни места',
+        'url': 'https://10sou.eu/%d0%bf%d1%80%d0%b8%d0%b5%d0%bc/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '12 СОУ София - Свободни места',
+        'url': 'https://12sou-sofia.info/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0-%d0%b2-%d0%bd%d0%b0%d1%87%d0%b0%d0%bb%d0%b5%d0%bd-%d0%b8-%d0%bf%d1%80%d0%be%d0%b3%d0%b8%d0%bc%d0%bd%d0%b0%d0%b7%d0%b8/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '30 СУ - Свободни места',
+        'url': 'https://30su-bg.com/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '36 СОУ - Прием',
+        'url': 'https://36sou.com/priem/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '68 СУ - Свободни места',
+        'url': 'https://68su.org/2025/07/07/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0-%d0%bf%d0%be-%d0%bf%d0%b0%d1%80%d0%b0%d0%bb%d0%b5%d0%bb%d0%ba%d0%b8-%d1%96-x%d1%96%d1%96-%d0%ba%d0%bb%d0%b0-8/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '119 СУ - Свободни места',
+        'url': 'https://119su.bg/bg/svobodni-mesta',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': '127 СОУ - Свободни места',
+        'url': 'https://127sou.com/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0/',
+        'selector': '.entry-content, .content, main, article'
+    },
+    {
+        'name': 'Еврейско училище - Свободни места',
+        'url': 'https://www.hebrewschool-bg.org/2025/07/08/%d1%81%d0%b2%d0%be%d0%b1%d0%be%d0%b4%d0%bd%d0%b8-%d0%bc%d0%b5%d1%81%d1%82%d0%b0-%d0%b7%d0%b0-%d1%83%d1%87%d0%b5%d0%bd%d0%b8%d1%86%d0%b8/',
+        'selector': '.entry-content, .content, main, article'
     }
 ]
 
 def run_monitor():
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    interval = int(os.getenv("CHECK_INTERVAL", 480))
-
+    
     monitor = WebsiteMonitor(bot_token, chat_id)
-
+    
+    # 🚀 NEW: Schedule monitoring at fixed UTC times
+    schedule.every().day.at("06:03").do(lambda: monitor.check_all_websites(WEBSITES))
+    schedule.every().day.at("12:03").do(lambda: monitor.check_all_websites(WEBSITES))
+    schedule.every().day.at("17:03").do(lambda: monitor.check_all_websites(WEBSITES))
+    
+    # Send startup notification
     monitor.send_telegram_message(
-        f"🎓 <b>Мониторинг стартиран</b>\nПроверявам {len(WEBSITES)} училища на всеки {interval} минути за свободни места."
+        f"🎓 <b>Мониторинг стартиран</b>\n"
+        f"Проверявам {len(WEBSITES)} училища в 06:03, 12:03 и 17:03 UTC за свободни места.\n"
+        f"Време на стартиране: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')} UTC"
     )
-
-    monitor.check_all_websites(WEBSITES)
-    schedule.every(interval).minutes.do(lambda: monitor.check_all_websites(WEBSITES))
-
+    
+    logging.info("📅 Scheduled monitoring at 06:03, 12:03, and 17:03 UTC")
+    
     while True:
         schedule.run_pending()
         time.sleep(60)
@@ -191,4 +256,5 @@ threading.Thread(target=run_monitor, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    logging.info(f"🚀 Starting Flask app on port {port}")
     app.run(host='0.0.0.0', port=port)
